@@ -3,7 +3,7 @@ using GatewayApi.Models;
 using Jose.keys;
 using System.Security.Cryptography;
 
-namespace GatewayApi
+namespace GatewayApi.Infrastructure
 {
     public sealed class ServerOwnKeyStore : IServerOwnKeyStore
     {
