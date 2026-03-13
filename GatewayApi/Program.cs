@@ -34,6 +34,7 @@ app.MapGet("/discovery/keys", ([FromServices] ServerOwnKeyStore keys) =>
 
 app.MapPost("/secure/process", async (
     HttpRequest request,
+    [FromHeader(Name = "MerchantId")] string merchantId,
     ServerOwnKeyStore gatewayKeys,
     ClientKeyStore clientKeys,
     CryptoService crypto,
@@ -45,14 +46,17 @@ app.MapPost("/secure/process", async (
     if (string.IsNullOrWhiteSpace(token))
         return Results.Problem("Corpo da requisição vazio ou inválido.", statusCode: StatusCodes.Status400BadRequest);
 
-    var clientDiscovery = config["Gateway:ClientDiscoveryUrl"];
+    var discoveryUrl = config[$"Gateway:ClientDiscovery:{merchantId}"];
     var appXUrl = config["Gateway:AppXUrl"];
-    await clientKeys.EnsureInitializedAsync(clientDiscovery!);
+    if (string.IsNullOrWhiteSpace(discoveryUrl))
+        return Results.Problem($"URL de discovery não configurada para MerchantId '{merchantId}'.", statusCode: StatusCodes.Status400BadRequest);
+
+    await clientKeys.EnsureInitializedAsync(merchantId, discoveryUrl);
     // 1) Decriptar + validar assinatura do CLIENTE
     var jsonPayload = crypto.Unprotect(
         token,
         gatewayKeys.GetEncPrivate(),          // privada ECDH do gateway
-        clientKeys.GetClientJwsPublic());     // pública ES384 do cliente
+        clientKeys.GetClientJwsPublic(merchantId));     // pública ES384 do cliente
     // 2) Enviar JSON para App X
     var http = httpClientFactory.CreateClient();
     var resp = await http.PostAsync(
@@ -65,7 +69,7 @@ app.MapPost("/secure/process", async (
     var responseToken = crypto.Protect(
         responseJson,
         gatewayKeys.GetJwsPrivate(),          // privada ES384 do gateway
-        clientKeys.GetClientEncPublic());     // pública ECDH do cliente
+        clientKeys.GetClientEncPublic(merchantId));     // pública ECDH do cliente
     return Results.Text(responseToken, "application/jose");
 });
 

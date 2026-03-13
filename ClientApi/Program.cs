@@ -43,14 +43,22 @@ app.MapPost("/client/send", async (
     var jsonPayload = JsonSerializer.Serialize(payload);
     var discoveryUrl = config["Client:GatewayDiscoveryUrl"];
     var processUrl = config["Client:GatewayProcessUrl"];
+    var merchantId = config["Client:MerchantId"];
     await serverKeys.EnsureInitializedAsync(discoveryUrl!);
     var jweToken = crypto.Protect(
         jsonPayload,
         clientKeys.GetJwsPrivate(),          // assina com chave privada do cliente (ES384)
         serverKeys.GetServerEncPublic());    // criptografa para a chave ECDH pública do gateway
     var http = httpClientFactory.CreateClient();
-    var content = new StringContent(jweToken, Encoding.UTF8, "application/jose");
-    var resp = await http.PostAsync(processUrl, content);
+    var request = new HttpRequestMessage(HttpMethod.Post, processUrl)
+    {
+        Content = new StringContent(jweToken, Encoding.UTF8, "application/jose")
+    };
+    if (!string.IsNullOrWhiteSpace(merchantId))
+    {
+        request.Headers.Add("MerchantId", merchantId);
+    }
+    var resp = await http.SendAsync(request);
     if (!resp.IsSuccessStatusCode)
         return Results.Problem($"Falha ao chamar gateway. Status {(int)resp.StatusCode}");
     var responseToken = await resp.Content.ReadAsStringAsync();

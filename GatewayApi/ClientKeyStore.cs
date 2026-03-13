@@ -6,10 +6,8 @@ namespace GatewayApi
     public sealed class ClientKeyStore
     {
         private readonly object _sync = new();
-        private bool _initialized;
 
-        private ECDsa? _clientJwsPublic;
-        private CngKey? _clientEncPublic;
+        private readonly Dictionary<string, (ECDsa JwsPublic, CngKey EncPublic)> _byMerchant = new();
         private readonly IHttpClientFactory _httpClientFactory;
 
         public ClientKeyStore(IHttpClientFactory httpClientFactory)
@@ -17,18 +15,20 @@ namespace GatewayApi
             _httpClientFactory = httpClientFactory;
         }
 
-        public async Task EnsureInitializedAsync(string discoveryUrl)
+        public async Task EnsureInitializedAsync(string merchantId, string discoveryUrl)
         {
-            if (_initialized) return;
+            if (string.IsNullOrWhiteSpace(merchantId))
+                throw new ArgumentException("merchantId é obrigatório.", nameof(merchantId));
 
             lock (_sync)
             {
-                if (_initialized) return;
+                if (_byMerchant.ContainsKey(merchantId))
+                    return;
             }
 
             var client = _httpClientFactory.CreateClient();
             var resp = await client.GetFromJsonAsync<DiscoveryKeysDto>(discoveryUrl)
-                       ?? throw new InvalidOperationException("Discovery do gateway inválido.");
+                       ?? throw new InvalidOperationException("Discovery do cliente inválido.");
 
             // JWS – chave pública ES384
             var jwsBytes = Convert.FromBase64String(resp.JwsPublicKey);
@@ -42,16 +42,31 @@ namespace GatewayApi
 
             lock (_sync)
             {
-                _clientJwsPublic = ecdsa;
-                _clientEncPublic = encPub;
-                _initialized = true;
+                if (!_byMerchant.ContainsKey(merchantId))
+                    _byMerchant[merchantId] = (ecdsa, encPub);
             }
         }
 
-        public ECDsa GetClientJwsPublic() =>
-            _clientJwsPublic ?? throw new InvalidOperationException("JWS pública do gateway não inicializada.");
+        public ECDsa GetClientJwsPublic(string merchantId)
+        {
+            lock (_sync)
+            {
+                if (_byMerchant.TryGetValue(merchantId, out var entry))
+                    return entry.JwsPublic;
+            }
 
-        public CngKey GetClientEncPublic() =>
-            _clientEncPublic ?? throw new InvalidOperationException("Chave ECDH pública do gateway não inicializada.");
+            throw new InvalidOperationException($"Chave JWS pública para merchant '{merchantId}' não inicializada.");
+        }
+
+        public CngKey GetClientEncPublic(string merchantId)
+        {
+            lock (_sync)
+            {
+                if (_byMerchant.TryGetValue(merchantId, out var entry))
+                    return entry.EncPublic;
+            }
+
+            throw new InvalidOperationException($"Chave ECDH pública para merchant '{merchantId}' não inicializada.");
+        }
     }
 }
