@@ -1,9 +1,11 @@
+using GatewayApi.Infrastructure.Abstractions;
+using GatewayApi.Models;
 using Jose.keys;
 using System.Security.Cryptography;
 
-namespace GatewayApi
+namespace GatewayApi.Infrastructure
 {
-    public sealed class ClientKeyStore
+    public sealed class ClientKeyStore : IClientKeyStore
     {
         private readonly object _sync = new();
 

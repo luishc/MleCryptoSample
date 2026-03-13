@@ -3,7 +3,14 @@ using System.Security.Cryptography;
 
 namespace ClientApi
 {
-    public sealed class ServerKeyStore
+    public interface IServerKeyStore
+    {
+        Task EnsureInitializedAsync(string discoveryUrl);
+        ECDsa GetServerJwsPublic();
+        CngKey GetServerEncPublic();
+    }
+
+    public sealed class ServerKeyStore : IServerKeyStore
     {
         private readonly object _sync = new();
         private bool _initialized;

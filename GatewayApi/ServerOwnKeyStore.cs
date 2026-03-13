@@ -1,9 +1,11 @@
+using GatewayApi.Infrastructure.Abstractions;
+using GatewayApi.Models;
 using Jose.keys;
 using System.Security.Cryptography;
 
 namespace GatewayApi
 {
-    public sealed class ServerOwnKeyStore
+    public sealed class ServerOwnKeyStore : IServerOwnKeyStore
     {
         // JWS (ES384)
         private readonly ECDsa _jwsPrivate;
@@ -12,6 +14,7 @@ namespace GatewayApi
         private readonly CngKey _encPrivate;
         private readonly byte[] _encX;
         private readonly byte[] _encY;
+
         public ServerOwnKeyStore()
         {
             // assinatura – P-384
@@ -31,6 +34,7 @@ namespace GatewayApi
             EncX = Convert.ToBase64String(_encX),
             EncY = Convert.ToBase64String(_encY)
         };
+
         public ECDsa GetJwsPrivate() => _jwsPrivate;
         public CngKey GetEncPrivate() => _encPrivate;
     }

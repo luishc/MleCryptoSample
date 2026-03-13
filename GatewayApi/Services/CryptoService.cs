@@ -1,17 +1,12 @@
+using GatewayApi.Services.Abstractions;
 using Jose;
 using System.Security.Cryptography;
 
-namespace ClientApi
+namespace GatewayApi.Services
 {
-    public interface ICryptoService
-    {
-        string Protect(string jsonPayload, ECDsa signingPrivateKey, CngKey receiverEncPublic);
-        string Unprotect(string token, CngKey ownEncPrivate, ECDsa senderJwsPublic);
-    }
-
     public sealed class CryptoService : ICryptoService
     {
-        public string Protect(string jsonPayload, ECDsa signingPrivateKey, CngKey receiverEncPublic)
+        public string Encrypt(string jsonPayload, ECDsa signingPrivateKey, CngKey receiverEncPublic)
         {
             var jws = JWT.Encode(jsonPayload, signingPrivateKey, JwsAlgorithm.ES384);
 
@@ -24,7 +19,7 @@ namespace ClientApi
             return jwe;
         }
 
-        public string Unprotect(string token, CngKey ownEncPrivate, ECDsa senderJwsPublic)
+        public string Decrypt(string token, CngKey ownEncPrivate, ECDsa senderJwsPublic)
         {
             var jws = JWT.Decode(
                 token,

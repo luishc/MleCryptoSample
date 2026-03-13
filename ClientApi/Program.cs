@@ -10,9 +10,9 @@ builder.Services.AddSwaggerGen();
 
 builder.Services.AddHttpClient();
 
-builder.Services.AddSingleton<ClientOwnKeyStore>();
-builder.Services.AddSingleton<ServerKeyStore>();
-builder.Services.AddSingleton<CryptoService>();
+builder.Services.AddSingleton<IClientOwnKeyStore, ClientOwnKeyStore>();
+builder.Services.AddSingleton<IServerKeyStore, ServerKeyStore>();
+builder.Services.AddSingleton<ICryptoService, CryptoService>();
 
 builder.Services.Configure<ClientOptions>(builder.Configuration.GetSection("Client"));
 
@@ -26,7 +26,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-app.MapGet("/discovery/keys", ([FromServices] ClientOwnKeyStore keys) =>
+app.MapGet("/discovery/keys", ([FromServices] IClientOwnKeyStore keys) =>
 {
     var dto = keys.GetDiscoveryKeys();
     return Results.Json(dto);
@@ -34,9 +34,9 @@ app.MapGet("/discovery/keys", ([FromServices] ClientOwnKeyStore keys) =>
 
 app.MapPost("/client/send", async (
     [FromBody] object payload,
-    ClientOwnKeyStore clientKeys,
-    ServerKeyStore serverKeys,
-    CryptoService crypto,
+    IClientOwnKeyStore clientKeys,
+    IServerKeyStore serverKeys,
+    ICryptoService crypto,
     IHttpClientFactory httpClientFactory,
     IConfiguration config) =>
 {
@@ -71,9 +71,3 @@ app.MapPost("/client/send", async (
 });
 
 app.Run();
-
-public sealed class ClientOptions
-{
-    public string? GatewayDiscoveryUrl { get; set; }
-    public string? GatewayProcessUrl { get; set; }
-}

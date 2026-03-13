@@ -4,7 +4,14 @@ using Jose.keys;
 
 namespace ClientApi
 {
-    public sealed class ClientOwnKeyStore
+    public interface IClientOwnKeyStore
+    {
+        DiscoveryKeysDto GetDiscoveryKeys();
+        ECDsa GetJwsPrivate();
+        CngKey GetEncPrivate();
+    }
+
+    public sealed class ClientOwnKeyStore : IClientOwnKeyStore
     {
         // JWS (ES384)
         private readonly ECDsa _jwsPrivate;
