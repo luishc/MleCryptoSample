@@ -33,13 +33,18 @@ app.MapGet("/discovery/keys", ([FromServices] ServerOwnKeyStore keys) =>
 });
 
 app.MapPost("/secure/process", async (
-    [FromBody] string token,
+    HttpRequest request,
     ServerOwnKeyStore gatewayKeys,
     ClientKeyStore clientKeys,
     CryptoService crypto,
     IHttpClientFactory httpClientFactory,
     IConfiguration config) =>
 {
+    using var reader = new StreamReader(request.Body, Encoding.UTF8);
+    var token = await reader.ReadToEndAsync();
+    if (string.IsNullOrWhiteSpace(token))
+        return Results.Problem("Corpo da requisição vazio ou inválido.", statusCode: StatusCodes.Status400BadRequest);
+
     var clientDiscovery = config["Gateway:ClientDiscoveryUrl"];
     var appXUrl = config["Gateway:AppXUrl"];
     await clientKeys.EnsureInitializedAsync(clientDiscovery!);
