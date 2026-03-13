@@ -1,0 +1,8 @@
+mle
+
+1) Adicionar rotação por kid
+2) Adicionar opção de baixar as privadas do GatewayApi do Azure KeyVault
+3) Adicionar opção de baixar as chaves publicas dos clientes do Azure KeyVault
+4) Criar projeto auxiliar para gerar as chaves privadas e exportar o base64
+
+** Validar se vamos manter o discovery com base64 ou as coordenadas - Ver padrão de mercado
