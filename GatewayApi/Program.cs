@@ -18,6 +18,25 @@ builder.Services.Configure<GatewayOptions>(builder.Configuration.GetSection("Gat
 
 var app = builder.Build();
 
+// Discovery de todos os clientes no startup.
+var discoverySection = builder.Configuration.GetSection("Gateway:ClientDiscovery");
+using (var scope = app.Services.CreateScope())
+{
+    var clientKeyStore = scope.ServiceProvider.GetRequiredService<ClientKeyStore>();
+    foreach (var child in discoverySection.GetChildren())
+    {
+        var merchantId = child.Key;
+        var discoveryUrl = child.Value;
+        if (string.IsNullOrWhiteSpace(merchantId) || string.IsNullOrWhiteSpace(discoveryUrl))
+        {
+            throw new InvalidOperationException("Configuração de Gateway:ClientDiscovery inválida (merchantId ou URL vazios).");
+        }
+
+        // Se qualquer discovery falhar, a aplicação não sobe.
+        await clientKeyStore.EnsureInitializedAsync(merchantId, discoveryUrl);
+    }
+}
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -50,8 +69,6 @@ app.MapPost("/secure/process", async (
     var appXUrl = config["Gateway:AppXUrl"];
     if (string.IsNullOrWhiteSpace(discoveryUrl))
         return Results.Problem($"URL de discovery não configurada para MerchantId '{merchantId}'.", statusCode: StatusCodes.Status400BadRequest);
-
-    await clientKeys.EnsureInitializedAsync(merchantId, discoveryUrl);
     // 1) Decriptar + validar assinatura do CLIENTE
     var jsonPayload = crypto.Unprotect(
         token,
