@@ -26,5 +26,16 @@ internal static class Base64Url
         s = s.TrimEnd('=').Replace('+', '-').Replace('/', '_');
         return s;
     }
+
+    public static byte[] Decode(string s)
+    {
+        s = s.Replace('-', '+').Replace('_', '/');
+        switch (s.Length % 4)
+        {
+            case 2: s += "=="; break;
+            case 3: s += "="; break;
+        }
+        return Convert.FromBase64String(s);
+    }
 }
 

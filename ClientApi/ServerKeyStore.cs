@@ -34,18 +34,30 @@ namespace ClientApi
             }
 
             var client = _httpClientFactory.CreateClient();
-            var resp = await client.GetFromJsonAsync<DiscoveryKeysDto>(discoveryUrl)
-                       ?? throw new InvalidOperationException("Discovery do gateway inválido.");
+            var jwks = await client.GetFromJsonAsync<JwkSet>(discoveryUrl)
+                       ?? throw new InvalidOperationException("JWKS do gateway inválido.");
 
-            // JWS – chave pública ES384
-            var jwsBytes = Convert.FromBase64String(resp.JwsPublicKey);
-            var ecdsa = ECDsa.Create();
-            ecdsa.ImportSubjectPublicKeyInfo(jwsBytes, out _);
+            var sigKey = jwks.Keys.FirstOrDefault(k => k.Use == "sig")
+                         ?? throw new InvalidOperationException("JWKS do gateway não contém chave de assinatura (use='sig').");
 
-            // JWE – chave pública ECDH-ES
-            var x = Convert.FromBase64String(resp.EncX);
-            var y = Convert.FromBase64String(resp.EncY);
-            var encPub = EccKey.New(x, y, d: null, usage: CngKeyUsages.KeyAgreement);
+            var encKey = jwks.Keys.FirstOrDefault(k => k.Use == "enc")
+                         ?? throw new InvalidOperationException("JWKS do gateway não contém chave de criptografia (use='enc').");
+
+            var sigParams = new ECParameters
+            {
+                Curve = ECCurve.NamedCurves.nistP384,
+                Q = new ECPoint
+                {
+                    X = Base64Url.Decode(sigKey.X),
+                    Y = Base64Url.Decode(sigKey.Y)
+                }
+            };
+
+            var ecdsa = ECDsa.Create(sigParams);
+
+            var encX = Base64Url.Decode(encKey.X);
+            var encY = Base64Url.Decode(encKey.Y);
+            var encPub = EccKey.New(encX, encY, d: null, usage: CngKeyUsages.KeyAgreement);
 
             lock (_sync)
             {

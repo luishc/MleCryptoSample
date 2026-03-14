@@ -13,6 +13,7 @@ builder.Services.AddHttpClient();
 builder.Services.AddSingleton<IClientOwnKeyStore, ClientOwnKeyStore>();
 builder.Services.AddSingleton<IServerKeyStore, ServerKeyStore>();
 builder.Services.AddSingleton<ICryptoService, CryptoService>();
+builder.Services.AddHostedService<GatewayJwksRefreshService>();
 
 builder.Services.Configure<ClientOptions>(builder.Configuration.GetSection("Client"));
 
