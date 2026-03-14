@@ -1,4 +1,4 @@
-﻿using GatewayApi.Models;
+using GatewayApi.Models;
 using System.Security.Cryptography;
 
 namespace GatewayApi.Infrastructure.Abstractions
@@ -8,5 +8,6 @@ namespace GatewayApi.Infrastructure.Abstractions
         DiscoveryKeysDto GetDiscoveryKeys();
         ECDsa GetJwsPrivate();
         CngKey GetEncPrivate();
+        IReadOnlyCollection<JwkKey> GetJwkKeys();
     }
 }

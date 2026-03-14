@@ -32,6 +32,32 @@ app.MapGet("/discovery/keys", ([FromServices] IClientOwnKeyStore keys) =>
     return Results.Json(dto);
 });
 
+app.MapGet("/.well-known/jwks.json", ([FromServices] IClientOwnKeyStore keys) =>
+{
+    var jwks = new JwkSet
+    {
+        Keys = keys.GetJwkKeys()
+    };
+
+    return Results.Json(jwks);
+});
+
+app.MapGet("/.well-known/jose-configuration", (HttpRequest request) =>
+{
+    var issuer = $"{request.Scheme}://{request.Host.Value}";
+
+    var config = new
+    {
+        issuer,
+        jwks_uri = $"{issuer}/.well-known/jwks.json",
+        jws_algs_supported = new[] { "ES384" },
+        jwe_algs_supported = new[] { "ECDH-ES" },
+        jwe_encs_supported = new[] { "A256GCM" }
+    };
+
+    return Results.Json(config);
+});
+
 app.MapPost("/client/send", async (
     [FromBody] object payload,
     IClientOwnKeyStore clientKeys,
