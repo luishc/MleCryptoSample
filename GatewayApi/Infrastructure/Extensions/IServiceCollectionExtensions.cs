@@ -1,4 +1,4 @@
-﻿using GatewayApi.Infrastructure.Modules;
+using GatewayApi.Infrastructure.Modules;
 
 namespace GatewayApi.Infrastructure.Extensions
 {
@@ -9,10 +9,11 @@ namespace GatewayApi.Infrastructure.Extensions
             IConfiguration configuration)
         {
             services.Configure<GatewayOptions>(configuration.GetSection("Gateway"));
-            services.AddHostedService(c =>
+            services.AddHostedService(provider =>
                 new JwksRefreshHostedService(
-                    c,
-                    TimeSpan.FromDays(1))); //TODO: Adicionar esse controle de tempo no appsettings
+                    provider,
+                    TimeSpan.FromDays(1),
+                    provider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<JwksRefreshHostedService>>()));
 
             services.AddAppModule(configuration);
         }

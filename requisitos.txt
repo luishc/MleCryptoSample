@@ -5,4 +5,24 @@ mle
 3) Adicionar opção de baixar as chaves publicas dos clientes do Azure KeyVault
 4) Criar projeto auxiliar para gerar as chaves privadas e exportar o base64
 
-** Validar se vamos manter o discovery com base64 ou as coordenadas - Ver padrão de mercado
+** Validar aplicabilidade do BackgroundService 
+
+
+
+
+
+
+
+
+ChatGPT
+
+Estou implementando uma api que irá implementar JWE + JWS utilizando ECDSA P-256 para o JWS e ECDH-ES A256GCM para o JWE. Essa aplicação será responsável por receber o payload criptografado e descriptografar e enviar o resultado via POST para uma aplicação X. 
+
+A resposta dessa aplicação X deverá ser criptografada novamente com a chave publica da aplicação cliente.
+
+Tendo em vista que tanto a minha aplicação quanto o cliente (sendo que terão N clientes) terão 2 certificados distintos para cada etapa (JWE + JWS) vou implementar um endpoint de discovery para facilitar a troca desses certificados. 
+
+1) Me mostre o padrão de mercado do json do discovery
+2) Quero que a aplicação obtenha os certificados publicos dos meus clientes de duas formas
+A) Consuma o endpoint de discevery do cliente
+B) Caso o cliente não tenha o endpoint, ele irá me enviar os certificados publicos e irei armazenar no Azure KeyVault e a minha aplicação irá baixar os certificados no startup da aplicação.

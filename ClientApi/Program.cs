@@ -19,6 +19,16 @@ builder.Services.Configure<ClientOptions>(builder.Configuration.GetSection("Clie
 
 var app = builder.Build();
 
+// Primeira execução: discovery no startup; se falhar, a aplicação não sobe.
+var discoveryUrl = app.Configuration["Client:GatewayDiscoveryUrl"];
+if (string.IsNullOrWhiteSpace(discoveryUrl))
+    throw new InvalidOperationException("Client:GatewayDiscoveryUrl não configurado.");
+using (var scope = app.Services.CreateScope())
+{
+    var serverKeyStore = scope.ServiceProvider.GetRequiredService<IServerKeyStore>();
+    await serverKeyStore.EnsureInitializedAsync(discoveryUrl);
+}
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();

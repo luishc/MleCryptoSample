@@ -27,10 +27,8 @@ namespace GatewayApi.Endpoints
             if (string.IsNullOrWhiteSpace(token))
                 return Results.Problem("Corpo da requisição vazio ou inválido.", statusCode: StatusCodes.Status400BadRequest);
 
-            var discoveryUrl = config[$"Gateway:ClientDiscovery:{merchantId}"];
             var appXUrl = config["Gateway:AppXUrl"];
-            if (string.IsNullOrWhiteSpace(discoveryUrl))
-                return Results.Problem($"URL de discovery não configurada para MerchantId '{merchantId}'.", statusCode: StatusCodes.Status400BadRequest);
+            
             // 1) Decriptar + validar assinatura do CLIENTE
             var jsonPayload = crypto.Decrypt(
                 token,

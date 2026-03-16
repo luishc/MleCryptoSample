@@ -5,31 +5,49 @@ namespace GatewayApi.Infrastructure;
 public sealed class JwksRefreshHostedService : BackgroundService
 {
     private readonly IServiceProvider _services;
-    private readonly TimeSpan _refreshKeys;
+    private readonly TimeSpan _refreshInterval;
+    private readonly ILogger<JwksRefreshHostedService> _logger;
 
     public JwksRefreshHostedService(
         IServiceProvider services,
-        TimeSpan refreshKeys)
+        TimeSpan refreshInterval,
+        ILogger<JwksRefreshHostedService> logger)
     {
         _services = services;
-        _refreshKeys = refreshKeys;
+        _refreshInterval = refreshInterval;
+        _logger = logger;
     }
 
-    protected override async Task ExecuteAsync(
-        CancellationToken stoppingToken)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Aguarda o intervalo antes da primeira atualização (a carga inicial já foi feita no startup).
+        try
+        {
+            await Task.Delay(_refreshInterval, stoppingToken);
+        }
+        catch (TaskCanceledException)
+        {
+            return;
+        }
+
         while (!stoppingToken.IsCancellationRequested)
         {
-            //TODO: Implementar refresh de forma que se alguma atualiza��o falhar, n�o quebrar a aplica��o
-            using (var scope = _services.CreateScope())
+            try
             {
-                var discoverService = scope.ServiceProvider.GetRequiredService<IDiscoveryClientsPublicKeys>();
-                await discoverService.InitAsync();
+                using (var scope = _services.CreateScope())
+                {
+                    var discoverService = scope.ServiceProvider.GetRequiredService<IDiscoveryClientsPublicKeys>();
+                    await discoverService.InitAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Falha na atualização diária das chaves JWKS dos clientes. A aplicação continuará usando as chaves já carregadas.");
             }
 
             try
             {
-                await Task.Delay(_refreshKeys, stoppingToken);
+                await Task.Delay(_refreshInterval, stoppingToken);
             }
             catch (TaskCanceledException)
             {
