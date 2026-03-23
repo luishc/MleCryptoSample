@@ -8,6 +8,8 @@ namespace GatewayApi.Infrastructure.Abstractions
         DiscoveryKeysDto GetDiscoveryKeys();
         ECDsa GetJwsPrivate();
         CngKey GetEncPrivate();
+        string GetCurrentSigKid();
+        string GetCurrentEncKid();
         IReadOnlyCollection<JwkKey> GetJwkKeys();
     }
 }

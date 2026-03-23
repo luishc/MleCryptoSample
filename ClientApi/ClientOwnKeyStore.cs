@@ -9,6 +9,8 @@ namespace ClientApi
         DiscoveryKeysDto GetDiscoveryKeys();
         ECDsa GetJwsPrivate();
         CngKey GetEncPrivate();
+        string GetCurrentSigKid();
+        string GetCurrentEncKid();
         IReadOnlyCollection<JwkKey> GetJwkKeys();
     }
 
@@ -45,6 +47,9 @@ namespace ClientApi
 
         public ECDsa GetJwsPrivate() => _jwsPrivate;
         public CngKey GetEncPrivate() => _encPrivate;
+
+        public string GetCurrentSigKid() => _jwkKeys.First(k => k.Use == "sig").Kid;
+        public string GetCurrentEncKid() => _jwkKeys.First(k => k.Use == "enc").Kid;
 
         public IReadOnlyCollection<JwkKey> GetJwkKeys() => _jwkKeys;
 

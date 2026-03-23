@@ -1,5 +1,4 @@
 using GatewayApi.Endpoints;
-using GatewayApi.Infrastructure;
 using GatewayApi.Infrastructure.Abstractions;
 using GatewayApi.Infrastructure.Extensions;
 

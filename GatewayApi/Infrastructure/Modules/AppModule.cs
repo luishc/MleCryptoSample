@@ -1,4 +1,6 @@
-﻿using GatewayApi.Infrastructure.Abstractions;
+using Azure.Core;
+using Azure.Identity;
+using GatewayApi.Infrastructure.Abstractions;
 using GatewayApi.Services;
 using GatewayApi.Services.Abstractions;
 
@@ -14,10 +16,16 @@ namespace GatewayApi.Infrastructure.Modules
             services.AddSingleton<IClientKeyStore, ClientKeyStore>();
             services.AddSingleton<ICryptoService, CryptoService>();
 
+            services.AddSingleton<TokenCredential>(_ => new DefaultAzureCredential());
+            services.AddSingleton<KeyVaultMerchantKeysLoader>();
+            services.AddSingleton<JwksMerchantKeysLoader>();
+
             services.AddScoped<IDiscoveryClientsPublicKeys>(c =>
                 new DiscoveryClientsPublicKeys(
                     configuration,
-                    c.GetRequiredService<IClientKeyStore>()));
+                    c.GetRequiredService<IClientKeyStore>(),
+                    c.GetRequiredService<JwksMerchantKeysLoader>(),
+                    c.GetRequiredService<KeyVaultMerchantKeysLoader>()));
         }
     }
 }

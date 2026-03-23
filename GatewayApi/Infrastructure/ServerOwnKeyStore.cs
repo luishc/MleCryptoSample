@@ -39,6 +39,9 @@ namespace GatewayApi.Infrastructure
         public ECDsa GetJwsPrivate() => _jwsPrivate;
         public CngKey GetEncPrivate() => _encPrivate;
 
+        public string GetCurrentSigKid() => _jwkKeys.First(k => k.Use == "sig").Kid;
+        public string GetCurrentEncKid() => _jwkKeys.First(k => k.Use == "enc").Kid;
+
         public IReadOnlyCollection<JwkKey> GetJwkKeys() => _jwkKeys;
 
         private IReadOnlyCollection<JwkKey> BuildInitialJwks()

@@ -1,6 +1,4 @@
 using GatewayApi.Infrastructure.Abstractions;
-using GatewayApi.Models;
-using Jose.keys;
 using System.Security.Cryptography;
 
 namespace GatewayApi.Infrastructure
@@ -8,79 +6,59 @@ namespace GatewayApi.Infrastructure
     public sealed class ClientKeyStore : IClientKeyStore
     {
         private readonly object _sync = new();
+        private readonly Dictionary<string, Dictionary<string, ECDsa>> _sigByMerchantAndKid = new();
+        private readonly Dictionary<string, Dictionary<string, CngKey>> _encByMerchantAndKid = new();
 
-        private readonly Dictionary<string, (ECDsa JwsPublic, CngKey EncPublic)> _byMerchant = new();
-        private readonly IHttpClientFactory _httpClientFactory;
-
-        public ClientKeyStore(IHttpClientFactory httpClientFactory)
-        {
-            _httpClientFactory = httpClientFactory;
-        }
-
-        public async Task EnsureInitializedAsync(string merchantId, string discoveryUrl)
+        public Task MergeMerchantKeysAsync(
+            string merchantId,
+            IReadOnlyDictionary<string, ECDsa> sigByKid,
+            IReadOnlyDictionary<string, CngKey> encByKid)
         {
             if (string.IsNullOrWhiteSpace(merchantId))
                 throw new ArgumentException("merchantId é obrigatório.", nameof(merchantId));
 
             lock (_sync)
             {
-                if (_byMerchant.ContainsKey(merchantId))
-                    return;
+                if (!_sigByMerchantAndKid.ContainsKey(merchantId))
+                    _sigByMerchantAndKid[merchantId] = new Dictionary<string, ECDsa>();
+                if (!_encByMerchantAndKid.ContainsKey(merchantId))
+                    _encByMerchantAndKid[merchantId] = new Dictionary<string, CngKey>();
+
+                foreach (var kv in sigByKid)
+                    _sigByMerchantAndKid[merchantId][kv.Key] = kv.Value;
+                foreach (var kv in encByKid)
+                    _encByMerchantAndKid[merchantId][kv.Key] = kv.Value;
             }
 
-            var client = _httpClientFactory.CreateClient();
-            var jwks = await client.GetFromJsonAsync<JwkSet>(discoveryUrl)
-                       ?? throw new InvalidOperationException("JWKS do cliente inválido.");
-
-            var sigKey = jwks.Keys.FirstOrDefault(k => k.Use == "sig")
-                         ?? throw new InvalidOperationException("JWKS do cliente não contém chave de assinatura (use='sig').");
-
-            var encKey = jwks.Keys.FirstOrDefault(k => k.Use == "enc")
-                         ?? throw new InvalidOperationException("JWKS do cliente não contém chave de criptografia (use='enc').");
-
-            var sigParams = new ECParameters
-            {
-                Curve = ECCurve.NamedCurves.nistP384,
-                Q = new ECPoint
-                {
-                    X = Base64Url.Decode(sigKey.X),
-                    Y = Base64Url.Decode(sigKey.Y)
-                }
-            };
-
-            var ecdsa = ECDsa.Create(sigParams);
-
-            var encX = Base64Url.Decode(encKey.X);
-            var encY = Base64Url.Decode(encKey.Y);
-            var encPub = EccKey.New(encX, encY, d: null, usage: CngKeyUsages.KeyAgreement);
-
-            lock (_sync)
-            {
-                if (!_byMerchant.ContainsKey(merchantId))
-                    _byMerchant[merchantId] = (ecdsa, encPub);
-            }
+            return Task.CompletedTask;
         }
 
-        public ECDsa GetClientJwsPublic(string merchantId)
+        public ECDsa GetClientJwsPublic(string merchantId, string kid)
         {
             lock (_sync)
             {
-                if (_byMerchant.TryGetValue(merchantId, out var entry))
-                    return entry.JwsPublic;
+                if (_sigByMerchantAndKid.TryGetValue(merchantId, out var byKid) && byKid.TryGetValue(kid, out var key))
+                    return key;
             }
-
-            throw new InvalidOperationException($"Chave JWS pública para merchant '{merchantId}' não inicializada.");
+            throw new InvalidOperationException($"Chave JWS pública do cliente para merchant '{merchantId}' e kid '{kid}' não encontrada.");
         }
 
-        public CngKey GetClientEncPublic(string merchantId)
+        public CngKey GetClientEncPublic(string merchantId, string kid)
         {
             lock (_sync)
             {
-                if (_byMerchant.TryGetValue(merchantId, out var entry))
-                    return entry.EncPublic;
+                if (_encByMerchantAndKid.TryGetValue(merchantId, out var byKid) && byKid.TryGetValue(kid, out var key))
+                    return key;
             }
+            throw new InvalidOperationException($"Chave ECDH pública do cliente para merchant '{merchantId}' e kid '{kid}' não encontrada.");
+        }
 
-            throw new InvalidOperationException($"Chave ECDH pública para merchant '{merchantId}' não inicializada.");
+        public string DeriveEncKidFromSigKid(string sigKid)
+        {
+            if (string.IsNullOrEmpty(sigKid)) throw new ArgumentException("sigKid inválido.", nameof(sigKid));
+            if (sigKid.StartsWith("sig-", StringComparison.OrdinalIgnoreCase))
+                return "enc-" + sigKid.Substring(4);
+            return "enc-" + sigKid;
         }
     }
 }

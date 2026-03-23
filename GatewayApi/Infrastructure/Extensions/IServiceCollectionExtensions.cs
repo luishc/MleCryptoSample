@@ -1,4 +1,5 @@
 using GatewayApi.Infrastructure.Modules;
+using GatewayApi.Models;
 
 namespace GatewayApi.Infrastructure.Extensions
 {
@@ -9,6 +10,7 @@ namespace GatewayApi.Infrastructure.Extensions
             IConfiguration configuration)
         {
             services.Configure<GatewayOptions>(configuration.GetSection("Gateway"));
+            services.Configure<GatewayKeyVaultOptions>(configuration.GetSection("Gateway:KeyVault"));
             services.AddHostedService(provider =>
                 new JwksRefreshHostedService(
                     provider,

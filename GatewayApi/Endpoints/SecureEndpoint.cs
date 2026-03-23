@@ -1,4 +1,4 @@
-﻿using GatewayApi.Infrastructure.Abstractions;
+using GatewayApi.Infrastructure.Abstractions;
 using GatewayApi.Services.Abstractions;
 using Microsoft.AspNetCore.Mvc;
 using System.Text;
@@ -28,13 +28,14 @@ namespace GatewayApi.Endpoints
                 return Results.Problem("Corpo da requisição vazio ou inválido.", statusCode: StatusCodes.Status400BadRequest);
 
             var appXUrl = config["Gateway:AppXUrl"];
-            
-            // 1) Decriptar + validar assinatura do CLIENTE
-            var jsonPayload = crypto.Decrypt(
+
+            // 1) Decriptar + validar assinatura do CLIENTE; obter kid do JWS para usar na resposta
+            var (jsonPayload, clientSigKid) = crypto.Decrypt(
                 token,
-                gatewayKeys.GetEncPrivate(),          // privada ECDH do gateway
-                clientKeys.GetClientJwsPublic(merchantId));     // pública ES384 do cliente
-                                                                // 2) Enviar JSON para App X
+                gatewayKeys.GetEncPrivate(),
+                kid => clientKeys.GetClientJwsPublic(merchantId, kid));
+
+            // 2) Enviar JSON para App X
             var http = httpClientFactory.CreateClient();
             var resp = await http.PostAsync(
                 appXUrl,
@@ -42,11 +43,16 @@ namespace GatewayApi.Endpoints
             if (!resp.IsSuccessStatusCode)
                 return Results.Problem($"Falha ao chamar aplicação X: {(int)resp.StatusCode}");
             var responseJson = await resp.Content.ReadAsStringAsync();
-            // 3) Assina como GATEWAY e criptografa para CLIENTE
+
+            // 3) Resposta: assinar com o gateway e criptografar para o cliente usando o mesmo key set (kid) do request
+            var clientEncKid = clientKeys.DeriveEncKidFromSigKid(clientSigKid);
+            var gatewaySigKid = gatewayKeys.GetCurrentSigKid();
             var responseToken = crypto.Encrypt(
                 responseJson,
-                gatewayKeys.GetJwsPrivate(),          // privada ES384 do gateway
-                clientKeys.GetClientEncPublic(merchantId));     // pública ECDH do cliente
+                gatewayKeys.GetJwsPrivate(),
+                clientKeys.GetClientEncPublic(merchantId, clientEncKid),
+                gatewaySigKid,
+                clientEncKid);
             return Results.Text(responseToken, "application/jose");
         }
     }

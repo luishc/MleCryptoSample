@@ -23,6 +23,7 @@ var app = builder.Build();
 var discoveryUrl = app.Configuration["Client:GatewayDiscoveryUrl"];
 if (string.IsNullOrWhiteSpace(discoveryUrl))
     throw new InvalidOperationException("Client:GatewayDiscoveryUrl não configurado.");
+
 using (var scope = app.Services.CreateScope())
 {
     var serverKeyStore = scope.ServiceProvider.GetRequiredService<IServerKeyStore>();
@@ -82,10 +83,15 @@ app.MapPost("/client/send", async (
     var processUrl = config["Client:GatewayProcessUrl"];
     var merchantId = config["Client:MerchantId"];
     await serverKeys.EnsureInitializedAsync(discoveryUrl!);
+
+    var clientSigKid = clientKeys.GetCurrentSigKid();
+    var gatewayEncKid = serverKeys.GetCurrentEncKid();
     var jweToken = crypto.Protect(
         jsonPayload,
-        clientKeys.GetJwsPrivate(),          // assina com chave privada do cliente (ES384)
-        serverKeys.GetServerEncPublic());    // criptografa para a chave ECDH pública do gateway
+        clientKeys.GetJwsPrivate(),
+        serverKeys.GetServerEncPublic(gatewayEncKid),
+        clientSigKid,
+        gatewayEncKid);
     var http = httpClientFactory.CreateClient();
     var request = new HttpRequestMessage(HttpMethod.Post, processUrl)
     {
@@ -99,11 +105,10 @@ app.MapPost("/client/send", async (
     if (!resp.IsSuccessStatusCode)
         return Results.Problem($"Falha ao chamar gateway. Status {(int)resp.StatusCode}");
     var responseToken = await resp.Content.ReadAsStringAsync();
-    // Inverso: gateway → cliente
     var jsonResponse = crypto.Unprotect(
         responseToken,
-        clientKeys.GetEncPrivate(),           // decripta com privada ECDH do cliente
-        serverKeys.GetServerJwsPublic());     // valida assinatura ES384 do gateway
+        clientKeys.GetEncPrivate(),
+        kid => serverKeys.GetServerJwsPublic(kid));
     return Results.Text(jsonResponse, "application/json");
 });
 
