@@ -17,18 +17,12 @@ public sealed class ServerKeyStore : IServerKeyStore
 
     public ECDsa GetServerJwsPublic(string kid)
     {
-        var expected = _provider.GetGatewaySigKid();
-        if (!string.Equals(kid, expected, StringComparison.Ordinal))
-            throw new InvalidOperationException($"kid inválido do gateway. Esperado '{expected}'.");
-        return _provider.GetGatewaySigPublic();
+        return _provider.GetGatewaySigPublic(kid);
     }
 
     public CngKey GetServerEncPublic(string kid)
     {
-        var expected = _provider.GetGatewayEncKid();
-        if (!string.Equals(kid, expected, StringComparison.Ordinal))
-            throw new InvalidOperationException($"kid inválido do gateway. Esperado '{expected}'.");
-        return _provider.GetGatewayEncPublic();
+        return _provider.GetGatewayEncPublic(kid);
     }
 }
 

@@ -50,16 +50,29 @@ public sealed class KeyInitializerTests
             .Build();
 
         var provider = Substitute.For<IKeyMaterialProvider>();
-        provider.GetClientSigKid("m1").Returns("sig-m1-2026-03");
-        provider.GetClientEncKid("m1").Returns("enc-m1-2026-03");
-        provider.GetClientSigKid("m2").Returns("sig-m2-2026-03");
-        provider.GetClientEncKid("m2").Returns("enc-m2-2026-03");
-        provider.GetClientSigPublic(Arg.Any<string>()).Returns(_ => ECDsa.Create(ECCurve.NamedCurves.nistP384));
-        provider.GetClientEncPublic(Arg.Any<string>()).Returns(_ =>
+        provider.GetClientSigPublicByKid("m1").Returns(_ => new Dictionary<string, ECDsa>
+        {
+            ["sig-m1-2026-04"] = ECDsa.Create(ECCurve.NamedCurves.nistP384),
+            ["sig-m1-2026-03"] = ECDsa.Create(ECCurve.NamedCurves.nistP384)
+        });
+        provider.GetClientSigPublicByKid("m2").Returns(_ => new Dictionary<string, ECDsa>
+        {
+            ["sig-m2-2026-04"] = ECDsa.Create(ECCurve.NamedCurves.nistP384),
+            ["sig-m2-2026-03"] = ECDsa.Create(ECCurve.NamedCurves.nistP384)
+        });
+        provider.GetClientEncPublicByKid(Arg.Any<string>()).Returns(_ =>
         {
             using var e = ECDsa.Create(ECCurve.NamedCurves.nistP384);
             var p = e.ExportParameters(false);
-            return Jose.keys.EccKey.New(p.Q.X!, p.Q.Y!, d: null, usage: CngKeyUsages.KeyAgreement);
+            var k1 = Jose.keys.EccKey.New(p.Q.X!, p.Q.Y!, d: null, usage: CngKeyUsages.KeyAgreement);
+            using var e2 = ECDsa.Create(ECCurve.NamedCurves.nistP384);
+            var p2 = e2.ExportParameters(false);
+            var k2 = Jose.keys.EccKey.New(p2.Q.X!, p2.Q.Y!, d: null, usage: CngKeyUsages.KeyAgreement);
+            return new Dictionary<string, CngKey>
+            {
+                ["enc-fallback-1"] = k1,
+                ["enc-fallback-2"] = k2
+            };
         });
 
         var store = Substitute.For<IClientKeyStore>();
@@ -69,11 +82,11 @@ public sealed class KeyInitializerTests
 
         await store.Received(1).MergeMerchantKeysAsync(
             "m1",
-            Arg.Any<IReadOnlyDictionary<string, ECDsa>>(),
+            Arg.Is<IReadOnlyDictionary<string, ECDsa>>(d => d.ContainsKey("sig-m1-2026-04") && d.ContainsKey("sig-m1-2026-03")),
             Arg.Any<IReadOnlyDictionary<string, CngKey>>());
         await store.Received(1).MergeMerchantKeysAsync(
             "m2",
-            Arg.Any<IReadOnlyDictionary<string, ECDsa>>(),
+            Arg.Is<IReadOnlyDictionary<string, ECDsa>>(d => d.ContainsKey("sig-m2-2026-04") && d.ContainsKey("sig-m2-2026-03")),
             Arg.Any<IReadOnlyDictionary<string, CngKey>>());
     }
 }

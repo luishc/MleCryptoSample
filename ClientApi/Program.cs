@@ -1,6 +1,7 @@
 using ClientApi;
 using ClientApi.Infrastructure;
 using ClientApi.Infrastructure.Abstractions;
+using ClientApi.Infrastructure.Helpers;
 using ClientApi.Models;
 using TokenCredential = Azure.Core.TokenCredential;
 using Azure.Identity;
@@ -84,9 +85,11 @@ app.MapPost("/client/send", async (
     if (!resp.IsSuccessStatusCode)
         return Results.Problem($"Falha ao chamar gateway. Status {(int)resp.StatusCode}");
     var responseToken = await resp.Content.ReadAsStringAsync();
+    var clientEncKid = JwtHeaderHelper.GetKidFromToken(responseToken)
+                       ?? throw new InvalidOperationException("Token JWE de resposta não contém 'kid' no header.");
     var jsonResponse = crypto.Unprotect(
         responseToken,
-        clientKeys.GetEncPrivate(),
+        clientKeys.GetEncPrivate(clientEncKid),
         kid => serverKeys.GetServerJwsPublic(kid));
     return Results.Text(jsonResponse, "application/json");
 });

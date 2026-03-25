@@ -1,4 +1,5 @@
 using GatewayApi.Infrastructure.Abstractions;
+using GatewayApi.Infrastructure.Helpers;
 using GatewayApi.Services.Abstractions;
 using Microsoft.AspNetCore.Mvc;
 using System.Text;
@@ -28,11 +29,13 @@ namespace GatewayApi.Endpoints
                 return Results.Problem("Corpo da requisição vazio ou inválido.", statusCode: StatusCodes.Status400BadRequest);
 
             var appXUrl = config["Gateway:AppXUrl"];
+            var gatewayEncKid = JwtHeaderHelper.GetKidFromToken(token)
+                                ?? throw new InvalidOperationException("Token JWE não contém 'kid' no header.");
 
             // 1) Decriptar + validar assinatura do CLIENTE; obter kid do JWS para usar na resposta
             var (jsonPayload, clientSigKid) = crypto.Decrypt(
                 token,
-                gatewayKeys.GetEncPrivate(),
+                gatewayKeys.GetEncPrivate(gatewayEncKid),
                 kid => clientKeys.GetClientJwsPublic(merchantId, kid));
 
             // 2) Enviar JSON para App X

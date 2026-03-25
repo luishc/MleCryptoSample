@@ -8,13 +8,13 @@ public interface IClientKeyMaterialProvider
 
     // Client own keys
     ECDsa GetClientSigPrivate();
-    CngKey GetClientEncPrivate();
+    CngKey GetClientEncPrivate(string kid);
     string GetClientSigKid();
     string GetClientEncKid();
 
-    // Gateway public keys (single active keypair)
-    ECDsa GetGatewaySigPublic();
-    CngKey GetGatewayEncPublic();
+    // Gateway public keys (current + previous during rotation window)
+    ECDsa GetGatewaySigPublic(string kid);
+    CngKey GetGatewayEncPublic(string kid);
     string GetGatewaySigKid();
     string GetGatewayEncKid();
 }

@@ -6,7 +6,7 @@ namespace ClientApi;
 public interface IClientOwnKeyStore
 {
     ECDsa GetJwsPrivate();
-    CngKey GetEncPrivate();
+    CngKey GetEncPrivate(string kid);
     string GetCurrentSigKid();
     string GetCurrentEncKid();
 }
@@ -21,7 +21,7 @@ public sealed class ClientOwnKeyStore : IClientOwnKeyStore
     }
 
     public ECDsa GetJwsPrivate() => _provider.GetClientSigPrivate();
-    public CngKey GetEncPrivate() => _provider.GetClientEncPrivate();
+    public CngKey GetEncPrivate(string kid) => _provider.GetClientEncPrivate(kid);
     public string GetCurrentSigKid() => _provider.GetClientSigKid();
     public string GetCurrentEncKid() => _provider.GetClientEncKid();
 }

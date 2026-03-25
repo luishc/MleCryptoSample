@@ -13,7 +13,7 @@ namespace GatewayApi.Infrastructure
         }
 
         public ECDsa GetJwsPrivate() => _provider.GetGatewaySigPrivate();
-        public CngKey GetEncPrivate() => _provider.GetGatewayEncPrivate();
+    public CngKey GetEncPrivate(string kid) => _provider.GetGatewayEncPrivate(kid);
         public string GetCurrentSigKid() => _provider.GetGatewaySigKid();
         public string GetCurrentEncKid() => _provider.GetGatewayEncKid();
     }

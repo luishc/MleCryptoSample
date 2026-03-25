@@ -19,12 +19,13 @@ public sealed class KeyVaultKeyMaterialProvider : IKeyMaterialProvider
     private bool _initialized;
     private readonly object _sync = new();
 
-    private ECDsa? _gatewaySigPriv;
-    private CngKey? _gatewayEncPriv;
+    private readonly Dictionary<string, ECDsa> _gatewaySigPrivByKid = new();
+    private readonly Dictionary<string, CngKey> _gatewayEncPrivByKid = new();
     private string? _gatewaySigKid;
     private string? _gatewayEncKid;
 
-    private readonly Dictionary<string, (ECDsa Sig, CngKey Enc, string SigKid, string EncKid)> _clientByMerchant = new();
+    private readonly Dictionary<string, Dictionary<string, ECDsa>> _clientSigByMerchantAndKid = new();
+    private readonly Dictionary<string, Dictionary<string, CngKey>> _clientEncByMerchantAndKid = new();
 
     public KeyVaultKeyMaterialProvider(
         TokenCredential credential,
@@ -46,9 +47,19 @@ public sealed class KeyVaultKeyMaterialProvider : IKeyMaterialProvider
 
         if (string.IsNullOrWhiteSpace(_options.Uri))
             throw new InvalidOperationException("Gateway:KeyVault:Uri é obrigatório.");
-        var suffix = _options.CertificateVersionSuffix?.Trim();
-        if (string.IsNullOrWhiteSpace(suffix))
-            throw new InvalidOperationException("Gateway:KeyVault:CertificateVersionSuffix é obrigatório.");
+        var globalCurrentSuffix = _options.CurrentCertificateVersionSuffix?.Trim();
+        if (string.IsNullOrWhiteSpace(globalCurrentSuffix))
+            globalCurrentSuffix = _options.CertificateVersionSuffix?.Trim(); // backwards compatibility
+        var globalPreviousSuffix = _options.PreviousCertificateVersionSuffix?.Trim();
+
+        var gatewayCurrentSuffix = _options.GatewayCurrentCertificateVersionSuffix?.Trim();
+        if (string.IsNullOrWhiteSpace(gatewayCurrentSuffix))
+            gatewayCurrentSuffix = globalCurrentSuffix;
+        if (string.IsNullOrWhiteSpace(gatewayCurrentSuffix))
+            throw new InvalidOperationException("Gateway:KeyVault:GatewayCurrentCertificateVersionSuffix é obrigatório.");
+        var gatewayPreviousSuffix = _options.GatewayPreviousCertificateVersionSuffix?.Trim();
+        if (string.IsNullOrWhiteSpace(gatewayPreviousSuffix))
+            gatewayPreviousSuffix = globalPreviousSuffix;
 
         var vaultUri = new Uri(_options.Uri);
         var certClient = new CertificateClient(vaultUri, _credential);
@@ -56,12 +67,23 @@ public sealed class KeyVaultKeyMaterialProvider : IKeyMaterialProvider
 
         // Gateway own private keys come from KV secrets (PFX)
         var gwId = string.IsNullOrWhiteSpace(_options.GatewayId) ? "gateway" : _options.GatewayId.Trim();
-        _gatewaySigKid = $"sig-{gwId}-{suffix}";
-        _gatewayEncKid = $"enc-{gwId}-{suffix}";
+        _gatewaySigKid = $"sig-{gwId}-{gatewayCurrentSuffix}";
+        _gatewayEncKid = $"enc-{gwId}-{gatewayCurrentSuffix}";
 
-        _gatewaySigPriv = await LoadEcdsaPrivateFromCertificateSecretAsync(secretClient, _gatewaySigKid, cancellationToken);
-        using var gwEncEcdsa = await LoadEcdsaPrivateFromCertificateSecretAsync(secretClient, _gatewayEncKid, cancellationToken);
-        _gatewayEncPriv = ToKeyAgreementCngKey(gwEncEcdsa, includePrivate: true);
+        _gatewaySigPrivByKid[_gatewaySigKid] = await LoadEcdsaPrivateFromCertificateSecretAsync(secretClient, _gatewaySigKid, cancellationToken);
+        using (var gwEncEcdsa = await LoadEcdsaPrivateFromCertificateSecretAsync(secretClient, _gatewayEncKid, cancellationToken))
+        {
+            _gatewayEncPrivByKid[_gatewayEncKid] = ToKeyAgreementCngKey(gwEncEcdsa, includePrivate: true);
+        }
+
+        if (!string.IsNullOrWhiteSpace(gatewayPreviousSuffix))
+        {
+            var prevGwSigKid = $"sig-{gwId}-{gatewayPreviousSuffix}";
+            var prevGwEncKid = $"enc-{gwId}-{gatewayPreviousSuffix}";
+            _gatewaySigPrivByKid[prevGwSigKid] = await LoadEcdsaPrivateFromCertificateSecretAsync(secretClient, prevGwSigKid, cancellationToken);
+            using var prevGwEncEcdsa = await LoadEcdsaPrivateFromCertificateSecretAsync(secretClient, prevGwEncKid, cancellationToken);
+            _gatewayEncPrivByKid[prevGwEncKid] = ToKeyAgreementCngKey(prevGwEncEcdsa, includePrivate: true);
+        }
 
         // Merchants list comes from Gateway:Merchants keys; Source must be KeyVault
         var merchantsSection = _configuration.GetSection("Gateway:Merchants");
@@ -75,11 +97,33 @@ public sealed class KeyVaultKeyMaterialProvider : IKeyMaterialProvider
             if (entry is null || !string.Equals(entry.Source?.Trim(), "KeyVault", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException($"Gateway:Merchants:{merchantId}: apenas Source=KeyVault é suportado.");
 
-            var clientSigKid = $"sig-{merchantId}-{suffix}";
-            var clientEncKid = $"enc-{merchantId}-{suffix}";
-            var sigPub = await LoadEcdsaPublicFromCertificateAsync(certClient, clientSigKid, cancellationToken);
-            var encPub = await LoadCngPublicFromCertificateAsync(certClient, clientEncKid, cancellationToken);
-            _clientByMerchant[merchantId] = (sigPub, encPub, clientSigKid, clientEncKid);
+            var merchantCurrentSuffix = entry.CurrentCertificateVersionSuffix?.Trim();
+            if (string.IsNullOrWhiteSpace(merchantCurrentSuffix))
+                merchantCurrentSuffix = globalCurrentSuffix;
+            if (string.IsNullOrWhiteSpace(merchantCurrentSuffix))
+                throw new InvalidOperationException($"Gateway:Merchants:{merchantId}: CurrentCertificateVersionSuffix é obrigatório.");
+            var merchantPreviousSuffix = entry.PreviousCertificateVersionSuffix?.Trim();
+            if (string.IsNullOrWhiteSpace(merchantPreviousSuffix))
+                merchantPreviousSuffix = globalPreviousSuffix;
+
+            var sigByKid = new Dictionary<string, ECDsa>();
+            var encByKid = new Dictionary<string, CngKey>();
+
+            var clientSigKid = $"sig-{merchantId}-{merchantCurrentSuffix}";
+            var clientEncKid = $"enc-{merchantId}-{merchantCurrentSuffix}";
+            sigByKid[clientSigKid] = await LoadEcdsaPublicFromCertificateAsync(certClient, clientSigKid, cancellationToken);
+            encByKid[clientEncKid] = await LoadCngPublicFromCertificateAsync(certClient, clientEncKid, cancellationToken);
+
+            if (!string.IsNullOrWhiteSpace(merchantPreviousSuffix))
+            {
+                var prevSigKid = $"sig-{merchantId}-{merchantPreviousSuffix}";
+                var prevEncKid = $"enc-{merchantId}-{merchantPreviousSuffix}";
+                sigByKid[prevSigKid] = await LoadEcdsaPublicFromCertificateAsync(certClient, prevSigKid, cancellationToken);
+                encByKid[prevEncKid] = await LoadCngPublicFromCertificateAsync(certClient, prevEncKid, cancellationToken);
+            }
+
+            _clientSigByMerchantAndKid[merchantId] = sigByKid;
+            _clientEncByMerchantAndKid[merchantId] = encByKid;
         }
 
         lock (_sync)
@@ -88,22 +132,33 @@ public sealed class KeyVaultKeyMaterialProvider : IKeyMaterialProvider
         }
     }
 
-    public ECDsa GetGatewaySigPrivate() => _gatewaySigPriv ?? throw new InvalidOperationException("Provider não inicializado.");
-    public CngKey GetGatewayEncPrivate() => _gatewayEncPriv ?? throw new InvalidOperationException("Provider não inicializado.");
+    public ECDsa GetGatewaySigPrivate()
+    {
+        if (!_initialized) throw new InvalidOperationException("Provider não inicializado.");
+        return _gatewaySigPrivByKid[_gatewaySigKid ?? throw new InvalidOperationException("Provider não inicializado.")];
+    }
+
+    public CngKey GetGatewayEncPrivate(string kid)
+    {
+        if (!_initialized) throw new InvalidOperationException("Provider não inicializado.");
+        if (_gatewayEncPrivByKid.TryGetValue(kid, out var key)) return key;
+        throw new InvalidOperationException($"Chave privada ECDH do gateway para kid '{kid}' não encontrada.");
+    }
+
     public string GetGatewaySigKid() => _gatewaySigKid ?? throw new InvalidOperationException("Provider não inicializado.");
     public string GetGatewayEncKid() => _gatewayEncKid ?? throw new InvalidOperationException("Provider não inicializado.");
 
-    public ECDsa GetClientSigPublic(string merchantId) => GetMerchant(merchantId).Sig;
-    public CngKey GetClientEncPublic(string merchantId) => GetMerchant(merchantId).Enc;
-    public string GetClientSigKid(string merchantId) => GetMerchant(merchantId).SigKid;
-    public string GetClientEncKid(string merchantId) => GetMerchant(merchantId).EncKid;
-
-    private (ECDsa Sig, CngKey Enc, string SigKid, string EncKid) GetMerchant(string merchantId)
+    public IReadOnlyDictionary<string, ECDsa> GetClientSigPublicByKid(string merchantId)
     {
         if (!_initialized) throw new InvalidOperationException("Provider não inicializado.");
-        if (string.IsNullOrWhiteSpace(merchantId))
-            throw new ArgumentException("merchantId é obrigatório.", nameof(merchantId));
-        if (_clientByMerchant.TryGetValue(merchantId, out var v)) return v;
+        if (_clientSigByMerchantAndKid.TryGetValue(merchantId, out var byKid)) return byKid;
+        throw new InvalidOperationException($"Merchant '{merchantId}' não carregado.");
+    }
+
+    public IReadOnlyDictionary<string, CngKey> GetClientEncPublicByKid(string merchantId)
+    {
+        if (!_initialized) throw new InvalidOperationException("Provider não inicializado.");
+        if (_clientEncByMerchantAndKid.TryGetValue(merchantId, out var byKid)) return byKid;
         throw new InvalidOperationException($"Merchant '{merchantId}' não carregado.");
     }
 

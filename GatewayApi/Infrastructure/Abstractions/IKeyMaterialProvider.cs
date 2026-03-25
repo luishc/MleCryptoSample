@@ -8,14 +8,12 @@ public interface IKeyMaterialProvider
 
     // Gateway own keys
     ECDsa GetGatewaySigPrivate();
-    CngKey GetGatewayEncPrivate();
+    CngKey GetGatewayEncPrivate(string kid);
     string GetGatewaySigKid();
     string GetGatewayEncKid();
 
-    // Client public keys per merchant (single active keypair per merchant)
-    ECDsa GetClientSigPublic(string merchantId);
-    CngKey GetClientEncPublic(string merchantId);
-    string GetClientSigKid(string merchantId);
-    string GetClientEncKid(string merchantId);
+    // Client public keys per merchant (current + previous during rotation window)
+    IReadOnlyDictionary<string, ECDsa> GetClientSigPublicByKid(string merchantId);
+    IReadOnlyDictionary<string, CngKey> GetClientEncPublicByKid(string merchantId);
 }
 

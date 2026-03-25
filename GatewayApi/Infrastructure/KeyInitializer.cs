@@ -38,15 +38,10 @@ public sealed class KeyInitializer : IKeyInitializer
             if (!string.Equals(entry.Source?.Trim(), "KeyVault", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException($"Gateway:Merchants:{merchantId}: apenas Source=KeyVault é suportado.");
 
-            var sig = _provider.GetClientSigPublic(merchantId);
-            var enc = _provider.GetClientEncPublic(merchantId);
-            var sigKid = _provider.GetClientSigKid(merchantId);
-            var encKid = _provider.GetClientEncKid(merchantId);
-
             await _clientKeyStore.MergeMerchantKeysAsync(
                 merchantId,
-                new Dictionary<string, ECDsa> { [sigKid] = sig },
-                new Dictionary<string, CngKey> { [encKid] = enc });
+                _provider.GetClientSigPublicByKid(merchantId),
+                _provider.GetClientEncPublicByKid(merchantId));
         }
     }
 }

@@ -10,21 +10,22 @@ Defina **uma única vez**:
 "Gateway": {
   "KeyVault": {
     "Uri": "https://meu-vault.vault.azure.net/",
-    "CertificateVersionSuffix": "2026-03",
-    "GatewayId": "gateway"
+    "GatewayId": "gateway",
+    "GatewayCurrentCertificateVersionSuffix": "2026-04",
+    "GatewayPreviousCertificateVersionSuffix": "2026-03"
   }
 }
 ```
 
 ### Certificados (por merchant / client keys)
 
-- `sig-{MerchantId}-{CertificateVersionSuffix}`  
-- `enc-{MerchantId}-{CertificateVersionSuffix}`  
+- `sig-{MerchantId}-{CurrentCertificateVersionSuffix}`  
+- `enc-{MerchantId}-{CurrentCertificateVersionSuffix}`  
 
 Exemplo com `MerchantId` = `fe9af6ea-40dd-4be6-b38a-9d2a38f1d6d9` e sufixo `2026-03`:
 
-- `sig-fe9af6ea-40dd-4be6-b38a-9d2a38f1d6d9-2026-03`
-- `enc-fe9af6ea-40dd-4be6-b38a-9d2a38f1d6d9-2026-03`
+- `sig-fe9af6ea-40dd-4be6-b38a-9d2a38f1d6d9-2026-04`
+- `enc-fe9af6ea-40dd-4be6-b38a-9d2a38f1d6d9-2026-04`
 
 Os **mesmos** valores são usados como `kid` nos headers JWS/JWE. O cliente deve assinar/criptografar com esses `kid` ao falar com o gateway para esse merchant.
 
@@ -33,8 +34,8 @@ Os **mesmos** valores são usados como `kid` nos headers JWS/JWE. O cliente deve
 O **gateway** também precisa de seus próprios certificados **com chave privada** no KV:
 
 ```json
-"sig-{GatewayId}-{CertificateVersionSuffix}"
-"enc-{GatewayId}-{CertificateVersionSuffix}"
+"sig-{GatewayId}-{GatewayCurrentCertificateVersionSuffix}"
+"enc-{GatewayId}-{GatewayCurrentCertificateVersionSuffix}"
 ```
 
 ## GatewayApi: Seção `Gateway:Merchants`
@@ -44,10 +45,14 @@ Apenas o `Source` (além do `MerchantId` na chave do JSON):
 ```json
 "Merchants": {
   "fe9af6ea-40dd-4be6-b38a-9d2a38f1d6d9": {
-    "Source": "KeyVault"
+    "Source": "KeyVault",
+    "CurrentCertificateVersionSuffix": "2026-05",
+    "PreviousCertificateVersionSuffix": "2026-04"
   }
 }
 ```
+
+Cada merchant pode rotacionar em período distinto, com seu próprio `Current/Previous`.
 
 É obrigatório existir **pelo menos um** merchant em `Gateway:Merchants`; sem essa seção (ou sem filhos) o gateway não inicia.
 
@@ -103,3 +108,15 @@ Seleção do modo:
   }
 }
 ```
+
+## Exemplo produção: dois merchants, janelas distintas
+
+Arquivos de referência (copie e ajuste `Uri`, URLs e GUIDs reais):
+
+| Arquivo | Conteúdo |
+|--------|----------|
+| [appsettings.Production.example.json](appsettings.Production.example.json) | Gateway com `KeyManagement: KeyVault`, rotação do próprio gateway (`GatewayCurrent` / `GatewayPrevious`) e **dois** merchants: um em **2026-05 / 2026-04**, outro em **2026-04 / 2026-03**. |
+| [../ClientApi/appsettings.Production.Merchant-A.example.json](../ClientApi/appsettings.Production.Merchant-A.example.json) | Cliente do merchant A (`fe9af6ea-…`): sufixos alinhados ao primeiro merchant no gateway. |
+| [../ClientApi/appsettings.Production.Merchant-B.example.json](../ClientApi/appsettings.Production.Merchant-B.example.json) | Cliente do merchant B (`a1b2c3d4-…`): sufixos alinhados ao segundo merchant. |
+
+Cada instância do **ClientApi** em produção deve usar o `MerchantId` e os sufixos `Client:KeyVault` que correspondem à entrada desse merchant em `Gateway:Merchants` no gateway.
