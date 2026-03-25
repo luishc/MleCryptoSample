@@ -11,11 +11,6 @@ namespace GatewayApi.Infrastructure.Extensions
         {
             services.Configure<GatewayOptions>(configuration.GetSection("Gateway"));
             services.Configure<GatewayKeyVaultOptions>(configuration.GetSection("Gateway:KeyVault"));
-            services.AddHostedService(provider =>
-                new JwksRefreshHostedService(
-                    provider,
-                    TimeSpan.FromDays(1),
-                    provider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<JwksRefreshHostedService>>()));
 
             services.AddAppModule(configuration);
         }

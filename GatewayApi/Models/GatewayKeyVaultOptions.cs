@@ -11,4 +11,10 @@ public sealed class GatewayKeyVaultOptions
 
     /// <summary>Sufixo de versão dos certificados (ex.: 2026-03).</summary>
     public string? CertificateVersionSuffix { get; set; }
+
+    /// <summary>
+    /// Identificador do gateway para nomear seus próprios certificados no vault.
+    /// Ex.: sig-{GatewayId}-{CertificateVersionSuffix}, enc-{GatewayId}-{CertificateVersionSuffix}
+    /// </summary>
+    public string GatewayId { get; set; } = "gateway";
 }

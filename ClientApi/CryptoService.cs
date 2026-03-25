@@ -1,5 +1,6 @@
 using Jose;
 using System.Security.Cryptography;
+using ClientApi.Infrastructure.Helpers;
 
 namespace ClientApi
 {

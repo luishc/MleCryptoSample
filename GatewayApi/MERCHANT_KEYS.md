@@ -1,21 +1,22 @@
-# Chaves públicas do cliente por MerchantId
+# Chaves por MerchantId (KV-only)
 
-O gateway carrega as chaves públicas de cada loja no startup (e no refresh diário) usando uma destas fontes:
+Os endpoints de discovery/JWKS foram descontinuados. **GatewayApi** e **ClientApi** passam a trabalhar somente com Azure Key Vault (produção) ou chaves locais no `appsettings` (desenvolvimento).
 
-## Configuração global do Key Vault
+## GatewayApi: Key Vault (produção)
 
-Quando algum merchant usa `Source: KeyVault`, defina **uma única vez**:
+Defina **uma única vez**:
 
 ```json
 "Gateway": {
   "KeyVault": {
     "Uri": "https://meu-vault.vault.azure.net/",
-    "CertificateVersionSuffix": "2026-03"
+    "CertificateVersionSuffix": "2026-03",
+    "GatewayId": "gateway"
   }
 }
 ```
 
-Nomes dos certificados no vault (por merchant):
+### Certificados (por merchant / client keys)
 
 - `sig-{MerchantId}-{CertificateVersionSuffix}`  
 - `enc-{MerchantId}-{CertificateVersionSuffix}`  
@@ -27,20 +28,16 @@ Exemplo com `MerchantId` = `fe9af6ea-40dd-4be6-b38a-9d2a38f1d6d9` e sufixo `2026
 
 Os **mesmos** valores são usados como `kid` nos headers JWS/JWE. O cliente deve assinar/criptografar com esses `kid` ao falar com o gateway para esse merchant.
 
-## Seção `Gateway:Merchants`
+### Certificados do próprio gateway
 
-### Discovery (JWKS)
+O **gateway** também precisa de seus próprios certificados **com chave privada** no KV:
 
 ```json
-"Merchants": {
-  "fe9af6ea-40dd-4be6-b38a-9d2a38f1d6d9": {
-    "Source": "Discovery",
-    "DiscoveryUrl": "https://cliente/.well-known/jwks.json"
-  }
-}
+"sig-{GatewayId}-{CertificateVersionSuffix}"
+"enc-{GatewayId}-{CertificateVersionSuffix}"
 ```
 
-### Key Vault
+## GatewayApi: Seção `Gateway:Merchants`
 
 Apenas o `Source` (além do `MerchantId` na chave do JSON):
 
@@ -55,3 +52,54 @@ Apenas o `Source` (além do `MerchantId` na chave do JSON):
 É obrigatório existir **pelo menos um** merchant em `Gateway:Merchants`; sem essa seção (ou sem filhos) o gateway não inicia.
 
 Autenticação no Azure: `DefaultAzureCredential`.
+
+## Modo local (desenvolvimento)
+
+### GatewayApi
+
+Seleção do modo:
+
+```json
+"Gateway": {
+  "KeyManagement": { "Mode": "Local" },
+  "LocalKeys": {
+    "Gateway": {
+      "SigKid": "sig-gateway-2026-03",
+      "EncKid": "enc-gateway-2026-03",
+      "SigPrivateKeyPem": "-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----",
+      "EncPrivateKeyPem": "-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----"
+    },
+    "Merchants": {
+      "fe9af6ea-40dd-4be6-b38a-9d2a38f1d6d9": {
+        "SigKid": "sig-fe9af6ea-40dd-4be6-b38a-9d2a38f1d6d9-2026-03",
+        "EncKid": "enc-fe9af6ea-40dd-4be6-b38a-9d2a38f1d6d9-2026-03",
+        "SigPublicKeyPem": "-----BEGIN PUBLIC KEY-----\\n...\\n-----END PUBLIC KEY-----",
+        "EncPublicKeyPem": "-----BEGIN PUBLIC KEY-----\\n...\\n-----END PUBLIC KEY-----"
+      }
+    }
+  }
+}
+```
+
+### ClientApi
+
+```json
+"Client": {
+  "KeyManagement": { "Mode": "Local" },
+  "MerchantId": "fe9af6ea-40dd-4be6-b38a-9d2a38f1d6d9",
+  "LocalKeys": {
+    "Client": {
+      "SigKid": "sig-fe9af6ea-40dd-4be6-b38a-9d2a38f1d6d9-2026-03",
+      "EncKid": "enc-fe9af6ea-40dd-4be6-b38a-9d2a38f1d6d9-2026-03",
+      "SigPrivateKeyPem": "-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----",
+      "EncPrivateKeyPem": "-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----"
+    },
+    "Gateway": {
+      "SigKid": "sig-gateway-2026-03",
+      "EncKid": "enc-gateway-2026-03",
+      "SigPublicKeyPem": "-----BEGIN PUBLIC KEY-----\\n...\\n-----END PUBLIC KEY-----",
+      "EncPublicKeyPem": "-----BEGIN PUBLIC KEY-----\\n...\\n-----END PUBLIC KEY-----"
+    }
+  }
+}
+```

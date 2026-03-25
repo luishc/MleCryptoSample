@@ -6,8 +6,7 @@ namespace GatewayApi.Infrastructure
     public sealed class ClientKeyStore : IClientKeyStore
     {
         private readonly object _sync = new();
-        private readonly Dictionary<string, Dictionary<string, ECDsa>> _sigByMerchantAndKid = new();
-        private readonly Dictionary<string, Dictionary<string, CngKey>> _encByMerchantAndKid = new();
+        private readonly Dictionary<string, (ECDsa Sig, CngKey Enc, string SigKid, string EncKid)> _byMerchant = new();
 
         public Task MergeMerchantKeysAsync(
             string merchantId,
@@ -17,17 +16,15 @@ namespace GatewayApi.Infrastructure
             if (string.IsNullOrWhiteSpace(merchantId))
                 throw new ArgumentException("merchantId é obrigatório.", nameof(merchantId));
 
+            // JWKS descontinuado: aceitamos exatamente 1 par ativo (sig/enc) e descartamos a chave do dicionário.
+            var sig = sigByKid.Count == 1 ? sigByKid.Values.First() : throw new InvalidOperationException("Esperado exatamente 1 chave 'sig' para o merchant.");
+            var enc = encByKid.Count == 1 ? encByKid.Values.First() : throw new InvalidOperationException("Esperado exatamente 1 chave 'enc' para o merchant.");
+            var sigKid = sigByKid.Keys.First();
+            var encKid = encByKid.Keys.First();
+
             lock (_sync)
             {
-                if (!_sigByMerchantAndKid.ContainsKey(merchantId))
-                    _sigByMerchantAndKid[merchantId] = new Dictionary<string, ECDsa>();
-                if (!_encByMerchantAndKid.ContainsKey(merchantId))
-                    _encByMerchantAndKid[merchantId] = new Dictionary<string, CngKey>();
-
-                foreach (var kv in sigByKid)
-                    _sigByMerchantAndKid[merchantId][kv.Key] = kv.Value;
-                foreach (var kv in encByKid)
-                    _encByMerchantAndKid[merchantId][kv.Key] = kv.Value;
+                _byMerchant[merchantId] = (sig, enc, sigKid, encKid);
             }
 
             return Task.CompletedTask;
@@ -37,8 +34,12 @@ namespace GatewayApi.Infrastructure
         {
             lock (_sync)
             {
-                if (_sigByMerchantAndKid.TryGetValue(merchantId, out var byKid) && byKid.TryGetValue(kid, out var key))
-                    return key;
+                if (_byMerchant.TryGetValue(merchantId, out var v))
+                {
+                    if (!string.Equals(v.SigKid, kid, StringComparison.Ordinal))
+                        throw new InvalidOperationException($"kid inválido para merchant '{merchantId}'. Esperado '{v.SigKid}'.");
+                    return v.Sig;
+                }
             }
             throw new InvalidOperationException($"Chave JWS pública do cliente para merchant '{merchantId}' e kid '{kid}' não encontrada.");
         }
@@ -47,8 +48,12 @@ namespace GatewayApi.Infrastructure
         {
             lock (_sync)
             {
-                if (_encByMerchantAndKid.TryGetValue(merchantId, out var byKid) && byKid.TryGetValue(kid, out var key))
-                    return key;
+                if (_byMerchant.TryGetValue(merchantId, out var v))
+                {
+                    if (!string.Equals(v.EncKid, kid, StringComparison.Ordinal))
+                        throw new InvalidOperationException($"kid inválido para merchant '{merchantId}'. Esperado '{v.EncKid}'.");
+                    return v.Enc;
+                }
             }
             throw new InvalidOperationException($"Chave ECDH pública do cliente para merchant '{merchantId}' e kid '{kid}' não encontrada.");
         }

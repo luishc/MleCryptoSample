@@ -1,4 +1,9 @@
 using ClientApi;
+using ClientApi.Infrastructure;
+using ClientApi.Infrastructure.Abstractions;
+using ClientApi.Models;
+using TokenCredential = Azure.Core.TokenCredential;
+using Azure.Identity;
 using Microsoft.AspNetCore.Mvc;
 using System.Text;
 using System.Text.Json;
@@ -13,21 +18,30 @@ builder.Services.AddHttpClient();
 builder.Services.AddSingleton<IClientOwnKeyStore, ClientOwnKeyStore>();
 builder.Services.AddSingleton<IServerKeyStore, ServerKeyStore>();
 builder.Services.AddSingleton<ICryptoService, CryptoService>();
-builder.Services.AddHostedService<GatewayJwksRefreshService>();
 
 builder.Services.Configure<ClientOptions>(builder.Configuration.GetSection("Client"));
+builder.Services.Configure<ClientKeyVaultOptions>(builder.Configuration.GetSection("Client:KeyVault"));
+builder.Services.Configure<LocalClientKeysOptions>(builder.Configuration.GetSection("Client:LocalKeys"));
+
+builder.Services.AddSingleton<TokenCredential>(_ => new DefaultAzureCredential());
+builder.Services.AddSingleton<IClientKeyMaterialProvider>(sp =>
+{
+    var mode = builder.Configuration["Client:KeyManagement:Mode"]?.Trim();
+    if (string.Equals(mode, "Local", StringComparison.OrdinalIgnoreCase))
+        return new LocalAppsettingsClientKeyMaterialProvider(sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<LocalClientKeysOptions>>());
+    return new KeyVaultClientKeyMaterialProvider(
+        sp.GetRequiredService<TokenCredential>(),
+        sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ClientKeyVaultOptions>>(),
+        builder.Configuration);
+});
 
 var app = builder.Build();
 
-// Primeira execução: discovery no startup; se falhar, a aplicação não sobe.
-var discoveryUrl = app.Configuration["Client:GatewayDiscoveryUrl"];
-if (string.IsNullOrWhiteSpace(discoveryUrl))
-    throw new InvalidOperationException("Client:GatewayDiscoveryUrl não configurado.");
-
+// Primeira execução: inicialização de chaves no startup; se falhar, a aplicação não sobe.
 using (var scope = app.Services.CreateScope())
 {
-    var serverKeyStore = scope.ServiceProvider.GetRequiredService<IServerKeyStore>();
-    await serverKeyStore.EnsureInitializedAsync(discoveryUrl);
+    var provider = scope.ServiceProvider.GetRequiredService<IClientKeyMaterialProvider>();
+    await provider.InitializeAsync();
 }
 
 if (app.Environment.IsDevelopment())
@@ -38,38 +52,6 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-app.MapGet("/discovery/keys", ([FromServices] IClientOwnKeyStore keys) =>
-{
-    var dto = keys.GetDiscoveryKeys();
-    return Results.Json(dto);
-});
-
-app.MapGet("/.well-known/jwks.json", ([FromServices] IClientOwnKeyStore keys) =>
-{
-    var jwks = new JwkSet
-    {
-        Keys = keys.GetJwkKeys()
-    };
-
-    return Results.Json(jwks);
-});
-
-app.MapGet("/.well-known/jose-configuration", (HttpRequest request) =>
-{
-    var issuer = $"{request.Scheme}://{request.Host.Value}";
-
-    var config = new
-    {
-        issuer,
-        jwks_uri = $"{issuer}/.well-known/jwks.json",
-        jws_algs_supported = new[] { "ES384" },
-        jwe_algs_supported = new[] { "ECDH-ES" },
-        jwe_encs_supported = new[] { "A256GCM" }
-    };
-
-    return Results.Json(config);
-});
-
 app.MapPost("/client/send", async (
     [FromBody] object payload,
     IClientOwnKeyStore clientKeys,
@@ -79,10 +61,8 @@ app.MapPost("/client/send", async (
     IConfiguration config) =>
 {
     var jsonPayload = JsonSerializer.Serialize(payload);
-    var discoveryUrl = config["Client:GatewayDiscoveryUrl"];
     var processUrl = config["Client:GatewayProcessUrl"];
     var merchantId = config["Client:MerchantId"];
-    await serverKeys.EnsureInitializedAsync(discoveryUrl!);
 
     var clientSigKid = clientKeys.GetCurrentSigKid();
     var gatewayEncKid = serverKeys.GetCurrentEncKid();

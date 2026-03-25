@@ -1,7 +1,7 @@
 using System.Text;
 using System.Text.Json;
 
-namespace GatewayApi.Infrastructure.Helpers;
+namespace ClientApi.Infrastructure.Helpers;
 
 /// <summary>
 /// Extrai o "kid" do header de um token JWT (JWS ou JWE) sem decodificar o payload.
@@ -35,3 +35,4 @@ public static class JwtHeaderHelper
         return Convert.FromBase64String(s);
     }
 }
+
