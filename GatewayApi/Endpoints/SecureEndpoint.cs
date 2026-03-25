@@ -21,8 +21,10 @@ namespace GatewayApi.Endpoints
             IClientKeyStore clientKeys,
             ICryptoService crypto,
             IHttpClientFactory httpClientFactory,
-            IConfiguration config)
+            IConfiguration config,
+            ILoggerFactory loggerFactory)
         {
+            var logger = loggerFactory.CreateLogger("GatewayApi.Security.KidUsage");
             using var reader = new StreamReader(request.Body, Encoding.UTF8);
             var token = await reader.ReadToEndAsync();
             if (string.IsNullOrWhiteSpace(token))
@@ -33,10 +35,30 @@ namespace GatewayApi.Endpoints
                                 ?? throw new InvalidOperationException("Token JWE não contém 'kid' no header.");
 
             // 1) Decriptar + validar assinatura do CLIENTE; obter kid do JWS para usar na resposta
-            var (jsonPayload, clientSigKid) = crypto.Decrypt(
-                token,
-                gatewayKeys.GetEncPrivate(gatewayEncKid),
-                kid => clientKeys.GetClientJwsPublic(merchantId, kid));
+            string clientSigKid;
+            string jsonPayload;
+            try
+            {
+                (jsonPayload, clientSigKid) = crypto.Decrypt(
+                    token,
+                    gatewayKeys.GetEncPrivate(gatewayEncKid),
+                    kid => clientKeys.GetClientJwsPublic(merchantId, kid));
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(
+                    ex,
+                    "KidUsage decrypt failed merchant={MerchantId} gatewayEncKid={GatewayEncKid}",
+                    merchantId,
+                    gatewayEncKid);
+                throw;
+            }
+
+            logger.LogInformation(
+                "KidUsage inbound merchant={MerchantId} gatewayEncKid={GatewayEncKid} clientSigKid={ClientSigKid}",
+                merchantId,
+                gatewayEncKid,
+                clientSigKid);
 
             // 2) Enviar JSON para App X
             var http = httpClientFactory.CreateClient();
@@ -54,6 +76,11 @@ namespace GatewayApi.Endpoints
                 responseJson,
                 gatewayKeys.GetJwsPrivate(),
                 clientKeys.GetClientEncPublic(merchantId, clientEncKid),
+                gatewaySigKid,
+                clientEncKid);
+            logger.LogInformation(
+                "KidUsage outbound merchant={MerchantId} gatewaySigKid={GatewaySigKid} clientEncKid={ClientEncKid}",
+                merchantId,
                 gatewaySigKid,
                 clientEncKid);
             return Results.Text(responseToken, "application/jose");
