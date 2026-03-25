@@ -73,7 +73,7 @@ public sealed class KeyVaultKeyMaterialProvider : IKeyMaterialProvider
         {
             var entry = merchantsSection.GetSection(merchantId).Get<MerchantKeysEntryOptions>();
             if (entry is null || !string.Equals(entry.Source?.Trim(), "KeyVault", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException($"Gateway:Merchants:{merchantId}: apenas Source=KeyVault é suportado (JWKS descontinuado).");
+                throw new InvalidOperationException($"Gateway:Merchants:{merchantId}: apenas Source=KeyVault é suportado.");
 
             var clientSigKid = $"sig-{merchantId}-{suffix}";
             var clientEncKid = $"enc-{merchantId}-{suffix}";

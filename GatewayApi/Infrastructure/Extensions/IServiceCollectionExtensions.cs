@@ -9,7 +9,6 @@ namespace GatewayApi.Infrastructure.Extensions
             this IServiceCollection services,
             IConfiguration configuration)
         {
-            services.Configure<GatewayOptions>(configuration.GetSection("Gateway"));
             services.Configure<GatewayKeyVaultOptions>(configuration.GetSection("Gateway:KeyVault"));
 
             services.AddAppModule(configuration);

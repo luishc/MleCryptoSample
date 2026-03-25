@@ -16,7 +16,7 @@ namespace GatewayApi.Infrastructure
             if (string.IsNullOrWhiteSpace(merchantId))
                 throw new ArgumentException("merchantId é obrigatório.", nameof(merchantId));
 
-            // JWKS descontinuado: aceitamos exatamente 1 par ativo (sig/enc) e descartamos a chave do dicionário.
+            // Aceitamos exatamente 1 par ativo (sig/enc) e descartamos a chave do dicionário.
             var sig = sigByKid.Count == 1 ? sigByKid.Values.First() : throw new InvalidOperationException("Esperado exatamente 1 chave 'sig' para o merchant.");
             var enc = encByKid.Count == 1 ? encByKid.Values.First() : throw new InvalidOperationException("Esperado exatamente 1 chave 'enc' para o merchant.");
             var sigKid = sigByKid.Keys.First();

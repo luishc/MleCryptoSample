@@ -19,7 +19,6 @@ builder.Services.AddSingleton<IClientOwnKeyStore, ClientOwnKeyStore>();
 builder.Services.AddSingleton<IServerKeyStore, ServerKeyStore>();
 builder.Services.AddSingleton<ICryptoService, CryptoService>();
 
-builder.Services.Configure<ClientOptions>(builder.Configuration.GetSection("Client"));
 builder.Services.Configure<ClientKeyVaultOptions>(builder.Configuration.GetSection("Client:KeyVault"));
 builder.Services.Configure<LocalClientKeysOptions>(builder.Configuration.GetSection("Client:LocalKeys"));
 

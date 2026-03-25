@@ -10,10 +10,8 @@ builder.Services.AddHttpClient();
 
 builder.Services.ConfigureModules(builder.Configuration);
 
-
 var app = builder.Build();
 
-// Primeira execução: inicialização de chaves no startup; se falhar, a aplicação não sobe.
 using (var scope = app.Services.CreateScope())
 {
     var keyInit = scope.ServiceProvider.GetRequiredService<IKeyInitializer>();

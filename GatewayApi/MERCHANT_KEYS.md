@@ -1,6 +1,6 @@
 # Chaves por MerchantId (KV-only)
 
-Os endpoints de discovery/JWKS foram descontinuados. **GatewayApi** e **ClientApi** passam a trabalhar somente com Azure Key Vault (produção) ou chaves locais no `appsettings` (desenvolvimento).
+Os endpoints de discovery foram descontinuados. **GatewayApi** e **ClientApi** passam a trabalhar somente com Azure Key Vault (produção) ou chaves locais no `appsettings` (desenvolvimento).
 
 ## GatewayApi: Key Vault (produção)
 
